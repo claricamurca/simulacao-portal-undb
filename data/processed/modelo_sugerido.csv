@@ -1,0 +1,4 @@
+metrica,quantidade_amostras,media,mediana,minimo,maximo,desvio_padrao,p90,p95,coeficiente_variacao,classificacao_variabilidade,modelo_sugerido,notacao_kendall_base
+tempo_login,12,21.2117,13.395,11.41,46.28,14.9738,45.758,46.005,0.7059,servico generico com alta variabilidade,M/G/c,M/G/c/∞/∞/FIFO
+tempo_solicitacao,12,12.4717,12.485,12.31,12.66,0.1067,12.559,12.605,0.0086,servico quase deterministico,M/D/c,M/D/c/∞/∞/FIFO
+tempo_total,12,59.0083,50.67,48.85,83.85,14.8614,83.549,83.7125,0.2519,servico generico com variabilidade moderada,M/G/c,M/G/c/∞/∞/FIFO

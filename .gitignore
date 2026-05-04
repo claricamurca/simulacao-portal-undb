@@ -1,0 +1,31 @@
+# Ambiente virtual
+venv/
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos sensíveis
+data/usuarios.csv
+data/usuarios_carga.csv
+data/usuarios_erros.csv
+data/*.pdf
+data/fixtures/*.pdf
+
+# Métricas brutas com dados reais
+data/raw/selenium/
+results/metrics_fluxo.csv
+results/metrics_carga.csv
+results/metrics_erros.csv
+
+# Logs
+*.log

@@ -1,0 +1,10 @@
+selenium
+pandas
+numpy
+scipy
+simpy
+streamlit
+plotly
+pytest
+dash
+dash-bootstrap-components
