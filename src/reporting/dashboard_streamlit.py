@@ -260,6 +260,11 @@ def apply_css() -> None:
             margin: .35rem 0 1.35rem;
         }}
 
+        /* REMOVE MENU DE DEPLOY / PERFIL */
+        [data-testid="stDecoration"] {
+            display: none !important;
+        }
+
         .kpi-card::before, .insight-card::before, .chart-card::before, .note-card::before, .table-card::before {{
             content: "";
             position: absolute;
