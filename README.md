@@ -1,6 +1,6 @@
-# Simulacao e Avaliacao de Software - Portal do Aluno UNDB
+# Simulacao e Avaliação de Software - Portal do Aluno UNDB
 
-Projeto de simulacao e avaliacao do fluxo de Requerimento de Horas Complementares do Portal do Aluno UNDB.
+Projeto de simulação e avaliacao do fluxo de Requerimento de Horas Complementares do Portal do Aluno UNDB.
 
 A versao final separa tres etapas:
 
