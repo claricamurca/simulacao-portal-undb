@@ -11,31 +11,31 @@ Projeto de simulação e avaliação do fluxo de Requerimento de Horas Complemen
 - Marcos Santos
 - Thiago Vasconcelos
 
-A versao final separa tres etapas:
+A versão final separa três etapas:
 
-- Analise empirica de tempos coletados anteriormente via Selenium.
-- Simulacao de eventos discretos com SimPy e modelos de filas.
-- Dashboard Streamlit para apresentacao dos resultados.
+- Análise empírica de tempos coletados anteriormente via Selenium.
+- Simulação de eventos discretos com SimPy e modelos de filas.
+- Dashboard Streamlit para apresentação dos resultados.
 
-Selenium nao e mais o motor do projeto. Os scripts antigos foram arquivados em `_archive_selenium/`; os dados brutos usados pela calibracao permanecem em `data/raw/selenium/`.
+Selenium não é mais o motor do projeto. Os scripts antigos foram arquivados em `_archive_selenium/`; os dados brutos usados pela calibração permanecem em `data/raw/selenium/`.
 
 ## Modelo de Filas
 
-O modelo principal da simulacao e:
+O modelo principal da simulação é:
 
 ```text
 M/D/c/infinito/infinito/FIFO
 ```
 
-Ele usa `tempo_solicitacao` como tempo de servico da entidade solicitacao. A decisao vem do coeficiente de variacao observado: quando `CV < 0.10`, o servico e tratado como quase deterministico.
+Ele usa `tempo_solicitacao` como tempo de serviço da entidade solicitação. A decisão vem do coeficiente de variação observado: quando `CV < 0.10`, o serviço é tratado como quase deterministico.
 
-O modelo complementar para sensibilidade e:
+O modelo complementar para sensibilidade é:
 
 ```text
 M/G/c/infinito/infinito/FIFO
 ```
 
-Esse modelo representa servico generico com variabilidade, usando distribuicao empirica ou triangular.
+Esse modelo representa serviço genérico com variabilidade, usando distribuição empírica ou triangular.
 
 ## Estrutura Atual
 
@@ -63,22 +63,22 @@ tests/
   integration/
 ```
 
-Arquivos Selenium, testes antigos, dashboard Dash e metricas antigas em `results/metrics_*.csv` foram movidos para `_archive_selenium/`.
+Arquivos Selenium, testes antigos, dashboard Dash e métricas antigas em `results/metrics_*.csv` foram movidos para `_archive_selenium/`.
 
-## Instalar Dependencias
+## Instalar Dependências
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Rodar Analise Empirica
+## Rodar Análise Empirica
 
 ```bash
 python -m src.analysis.empirical_metrics
 python -m src.analysis.model_selection
 ```
 
-A analise empirica le:
+A análise empirica lê:
 
 ```text
 data/raw/selenium/metrics_fluxo.csv
@@ -91,7 +91,7 @@ data/processed/resumo_tempos_observados.csv
 data/processed/modelo_sugerido.csv
 ```
 
-## Rodar Simulacao
+## Rodar Simulação
 
 ```bash
 python -m src.simulation.experiments
@@ -111,8 +111,8 @@ results/simulation/comparacao_analitica_md1.csv
 streamlit run src/reporting/dashboard_streamlit.py
 ```
 
-O dashboard apresenta calibracao empirica, estabilidade, capacidade, desempenho de filas, degradacao e comparacao analitica M/D/1.
+O dashboard apresenta calibração empirica, estabilidade, capacidade, desempenho de filas, degradação e comparação analítica M/D/1.
 
-## Observacao Sobre Dados
+## Observação Sobre Dados
 
 Arquivos brutos de coleta, usuarios, PDFs e o arquivo `_archive_selenium/` devem permanecer fora do versionamento quando contiverem dados reais ou sensiveis.
