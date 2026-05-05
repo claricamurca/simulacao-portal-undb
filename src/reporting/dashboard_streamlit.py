@@ -99,6 +99,7 @@ COLORS = {
 
 st.set_page_config(
     layout="wide",
+    initial_sidebar_state="collapsed",
     page_title="Dashboard de Simulação — Portal UNDB",
     page_icon=str(PAGE_ICON),
 )
@@ -108,7 +109,25 @@ def apply_css() -> None:
     st.markdown(
         f"""
         <style>
-        #MainMenu, footer, header {{ visibility: hidden; }}
+        #MainMenu {{
+            visibility: hidden;
+        }}
+
+        footer, header {{
+            visibility: hidden;
+            display: none !important;
+        }}
+
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarContent"],
+        .stDeployButton {{
+            display: none !important;
+            visibility: hidden !important;
+        }}
 
         :root {{
             --bg: {COLORS["bg"]};
@@ -1210,39 +1229,6 @@ def diagnostic_table(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def sidebar_filters(summary: pd.DataFrame) -> dict:
-    def options(col: str):
-        if summary.empty or col not in summary.columns:
-            return []
-        return sorted(summary[col].dropna().unique().tolist())
-
-    filter_keys = ["modelo", "periodo", "lambda_hora", "c", "status", "distribuicao_servico"]
-    for key in filter_keys:
-        st.session_state.setdefault(key, [])
-
-    def clear_filters():
-        for key in filter_keys:
-            st.session_state[key] = []
-
-    st.sidebar.markdown("### Filtros")
-    modelos = st.sidebar.multiselect("Modelo", options("modelo"), key="modelo")
-    periodos = st.sidebar.multiselect("Período", options("periodo"), key="periodo")
-    lambdas = st.sidebar.multiselect("λ chegadas/hora", options("lambda_hora"), key="lambda_hora")
-    capacidades = st.sidebar.multiselect("Capacidade c", options("c"), key="c")
-    status = st.sidebar.multiselect("Status de estabilidade", options("status_predominante"), key="status")
-    distribuicoes = st.sidebar.multiselect("Distribuição de serviço", options("distribuicao_servico"), key="distribuicao_servico")
-    st.sidebar.button("Limpar filtros", on_click=clear_filters)
-
-    return {
-        "modelos": modelos,
-        "periodos": periodos,
-        "lambdas": lambdas,
-        "capacidades": capacidades,
-        "status": status,
-        "distribuicoes": distribuicoes,
-    }
-
-
 def render_header() -> None:
     st.markdown(
         """
@@ -1489,35 +1475,9 @@ def main() -> None:
     empirical = data["resumo_tempos"]
     model_selection = data["modelo_sugerido"]
 
-    filters = sidebar_filters(summary_raw)
-    summary = filtrar_dados(
-        summary_raw,
-        modelos=filters["modelos"],
-        periodos=filters["periodos"],
-        lambdas=filters["lambdas"],
-        capacidades=filters["capacidades"],
-        status=filters["status"],
-        distribuicoes=filters["distribuicoes"],
-        status_col="status_predominante",
-    )
-    replicas = filtrar_dados(
-        replicas_raw,
-        modelos=filters["modelos"],
-        periodos=filters["periodos"],
-        lambdas=filters["lambdas"],
-        capacidades=filters["capacidades"],
-        status=filters["status"],
-        distribuicoes=filters["distribuicoes"],
-        status_col="status_estabilidade",
-    )
+    summary = summary_raw.copy()
+    replicas = replicas_raw.copy()
     analytical = analytical_raw.copy()
-    if not analytical.empty:
-        if filters["periodos"] and "periodo" in analytical.columns:
-            analytical = analytical[analytical["periodo"].isin(filters["periodos"])]
-        if filters["lambdas"] and "lambda_hora" in analytical.columns:
-            analytical = analytical[analytical["lambda_hora"].isin(filters["lambdas"])]
-        if filters["capacidades"] and "c" in analytical.columns:
-            analytical = analytical[analytical["c"].isin(filters["capacidades"])]
 
     render_header()
 
@@ -1556,4 +1516,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
