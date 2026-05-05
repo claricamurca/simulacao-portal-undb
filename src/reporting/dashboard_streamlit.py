@@ -543,69 +543,6 @@ def apply_css() -> None:
             color: var(--text);
             box-shadow: 0 0 20px rgba(34, 211, 238, .18);
         }}
-
-        /* Menu principal do Streamlit */
-        #MainMenu {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        /* Header/topbar */
-        header {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stHeader"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stToolbar"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stAppToolbar"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stDecoration"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stStatusWidget"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="collapsedControl"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        [data-testid="stSidebarCollapsedControl"] {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        /* Botão Deploy */
-        .stDeployButton {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        /* Footer */
-        footer {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        /* Remove padding superior que sobra quando o header some */
-        .block-container {{
-            padding-top: 1rem !important;}}
         </style>
         """,
         unsafe_allow_html=True,
