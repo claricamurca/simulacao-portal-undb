@@ -10,6 +10,7 @@ import streamlit.components.v1 as components
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+PAGE_ICON = BASE_DIR / "assets" / "undb_page_icon.png"
 
 FILES = {
     "simulacao_resultados": BASE_DIR / "results" / "simulation" / "simulacao_resultados.csv",
@@ -99,7 +100,7 @@ COLORS = {
 st.set_page_config(
     layout="wide",
     page_title="Dashboard de Simulação — Portal UNDB",
-    page_icon="📊",
+    page_icon=str(PAGE_ICON),
 )
 
 
@@ -1555,3 +1556,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

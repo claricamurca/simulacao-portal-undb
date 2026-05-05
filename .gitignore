@@ -1,11 +1,13 @@
-# Ambiente virtual
+# Ambientes e configuracoes locais
 venv/
+.venv/
+env/
 .env
 .streamlit/secrets.toml
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 .pytest_cache/
@@ -14,18 +16,21 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Arquivos sensíveis
-data/usuarios.csv
-data/usuarios_carga.csv
-data/usuarios_erros.csv
+# Arquivo Selenium legado
+_archive_selenium/
+
+# Dados sensiveis e brutos
+data/usuarios*.csv
 data/*.pdf
-data/fixtures/*.pdf
-
-# Métricas brutas com dados reais
+data/fixtures/
 data/raw/selenium/
-results/metrics_fluxo.csv
-results/metrics_carga.csv
-results/metrics_erros.csv
 
-# Logs
+# Metricas antigas fora da estrutura final
+results/metrics_*.csv
+results/graficos/
+results/figures/
+results/empirical/
+
+# Logs e saidas temporarias
 *.log
+*.tmp

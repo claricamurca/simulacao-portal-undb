@@ -1,124 +1,94 @@
 # Simulacao e Avaliacao de Software - Portal do Aluno UNDB
 
-Este projeto organiza uma base para estudar o fluxo de Requerimento de Horas Complementares do Portal do Aluno UNDB usando coleta empirica e simulacao baseada em modelos de filas.
+Projeto de simulacao e avaliacao do fluxo de Requerimento de Horas Complementares do Portal do Aluno UNDB.
 
-O objetivo da migracao e separar claramente duas responsabilidades:
+A versao final separa tres etapas:
 
-- Selenium coleta tempos reais observados no portal.
-- SimPy sera o motor principal da simulacao.
+- Analise empirica de tempos coletados anteriormente via Selenium.
+- Simulacao de eventos discretos com SimPy e modelos de filas.
+- Dashboard Streamlit para apresentacao dos resultados.
 
-## Papel do Selenium
+Selenium nao e mais o motor do projeto. Os scripts antigos foram arquivados em `_archive_selenium/`; os dados brutos usados pela calibracao permanecem em `data/raw/selenium/`.
 
-Selenium nao deve ser tratado como mecanismo principal de simulacao. Ele interage com o sistema real, abre navegador, executa o fluxo do usuario e registra tempos observados, como:
+## Modelo de Filas
 
-- tempo de login
-- tempo de preenchimento/envio da solicitacao
-- tempo total do fluxo
-- status da execucao
-- erro observado, quando existir
-
-Esses dados sao empiricos. Eles servem para calibrar o modelo de filas, estimar tempos de servico e avaliar a variabilidade real do sistema.
-
-## Papel do SimPy
-
-SimPy sera usado para simular o comportamento do sistema sem depender do navegador nem do portal real a cada execucao. A simulacao deve representar chegadas, fila, servidores, atendimento e metricas de desempenho.
-
-Nesta primeira fase, a simulacao completa ainda nao foi implementada. Foram criadas apenas a estrutura de pastas, a analise empirica e a selecao inicial do modelo.
-
-## Modelo Inicial
-
-O modelo candidato inicial e:
+O modelo principal da simulacao e:
 
 ```text
-M/G/c/∞/∞/FIFO
+M/D/c/infinito/infinito/FIFO
 ```
 
-Na Notacao de Kendall:
+Ele usa `tempo_solicitacao` como tempo de servico da entidade solicitacao. A decisao vem do coeficiente de variacao observado: quando `CV < 0.10`, o servico e tratado como quase deterministico.
 
-- `M`: processo de chegada Markoviano, normalmente associado a chegadas Poisson.
-- `G`: distribuicao geral do tempo de servico.
-- `c`: numero de servidores ou canais de atendimento.
-- `∞`: capacidade infinita da fila.
-- `∞`: populacao fonte infinita.
-- `FIFO`: disciplina de atendimento por ordem de chegada.
-
-Esse modelo e adequado como ponto de partida porque os tempos coletados podem apresentar variabilidade. Caso o coeficiente de variacao do tempo de servico escolhido seja baixo, o modelo pode ser simplificado para:
+O modelo complementar para sensibilidade e:
 
 ```text
-M/D/c/∞/∞/FIFO
+M/G/c/infinito/infinito/FIFO
 ```
 
-## Decisao pelo Coeficiente de Variacao
+Esse modelo representa servico generico com variabilidade, usando distribuicao empirica ou triangular.
 
-A selecao inicial segue esta regra:
-
-- `CV < 0.10`: servico quase deterministico, sugerindo `M/D/c`.
-- `0.10 <= CV <= 0.50`: servico generico com variabilidade moderada, sugerindo `M/G/c`.
-- `CV > 0.50`: servico generico com alta variabilidade, sugerindo `M/G/c`.
-
-## Estrutura Criada
+## Estrutura Atual
 
 ```text
+assets/
 data/
-  fixtures/
   raw/
     selenium/
+      metrics_fluxo.csv
   processed/
-
+    resumo_tempos_observados.csv
+    modelo_sugerido.csv
+results/
+  simulation/
+    simulacao_resultados.csv
+    resumo_cenarios.csv
+    comparacao_analitica_md1.csv
 src/
-  collection/
-    selenium/
-      flows/
-      collectors/
-      pages/
   analysis/
   simulation/
-    models/
   reporting/
-
-results/
-  empirical/
-  simulation/
-  figures/
-
+    dashboard_streamlit.py
 tests/
   unit/
   integration/
 ```
 
-## Como Rodar a Analise Empirica
+Arquivos Selenium, testes antigos, dashboard Dash e metricas antigas em `results/metrics_*.csv` foram movidos para `_archive_selenium/`.
+
+## Instalar Dependencias
+
+```bash
+pip install -r requirements.txt
+```
+
+## Rodar Analise Empirica
 
 ```bash
 python -m src.analysis.empirical_metrics
-```
-
-Esse comando le `data/raw/selenium/metrics_fluxo.csv`, considera apenas execucoes com status `SUCESSO` e salva:
-
-```text
-data/processed/resumo_tempos_observados.csv
-```
-
-## Como Rodar a Selecao do Modelo
-
-```bash
 python -m src.analysis.model_selection
 ```
 
-Esse comando le o resumo empirico, classifica a variabilidade pelo coeficiente de variacao e salva:
+A analise empirica le:
 
 ```text
+data/raw/selenium/metrics_fluxo.csv
+```
+
+E gera:
+
+```text
+data/processed/resumo_tempos_observados.csv
 data/processed/modelo_sugerido.csv
 ```
 
-## Como Rodar a Simulacao
+## Rodar Simulacao
 
 ```bash
 python -m src.simulation.experiments
 ```
 
-Esse comando executa a simulacao de eventos discretos com SimPy para solicitacoes chegando ao portal, aguardando em fila FIFO e sendo processadas por `c` servidores paralelos.
-
-As saidas sao:
+Saidas geradas:
 
 ```text
 results/simulation/simulacao_resultados.csv
@@ -126,24 +96,14 @@ results/simulation/resumo_cenarios.csv
 results/simulation/comparacao_analitica_md1.csv
 ```
 
-O modelo principal e `M/D/c/∞/∞/FIFO`, usando `tempo_solicitacao` como tempo de servico deterministico. O modelo complementar `M/G/c/∞/∞/FIFO` fica disponivel para analise de sensibilidade usando distribuicao triangular ou empirica.
-
-## Como Rodar o Dashboard Dash
-
-```bash
-python -m src.reporting.dashboard_dash
-```
-
-Este dashboard usa Dash, Plotly e Dash Bootstrap Components para visualizar calibracao empirica, estabilidade, capacidade, desempenho de filas, degradacao e comparacao analitica M/D/1.
-
-## Como Rodar o Dashboard Streamlit
+## Rodar Dashboard
 
 ```bash
 streamlit run src/reporting/dashboard_streamlit.py
 ```
 
-Este dashboard usa Streamlit e Plotly em uma interface dark neon premium para apresentar os resultados da simulacao, a calibracao empirica, estabilidade, filas, degradacao e comparacao analitica.
+O dashboard apresenta calibracao empirica, estabilidade, capacidade, desempenho de filas, degradacao e comparacao analitica M/D/1.
 
-## Proxima Fase
+## Observacao Sobre Dados
 
-Na proxima etapa, os resultados simulados podem ser incorporados ao dashboard e comparados visualmente aos dados empiricos coletados via Selenium.
+Arquivos brutos de coleta, usuarios, PDFs e o arquivo `_archive_selenium/` devem permanecer fora do versionamento quando contiverem dados reais ou sensiveis.
