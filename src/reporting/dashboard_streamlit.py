@@ -1,5 +1,6 @@
 from pathlib import Path
 import html as html_lib
+import json
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ FILES = {
     "comparacao_analitica": BASE_DIR / "results" / "simulation" / "comparacao_analitica_md1.csv",
     "resumo_tempos": BASE_DIR / "data" / "processed" / "resumo_tempos_observados.csv",
     "modelo_sugerido": BASE_DIR / "data" / "processed" / "modelo_sugerido.csv",
+    "model_inputs": BASE_DIR / "data" / "processed" / "model_inputs.json",
 }
 
 NUMERIC_COLUMNS = {
@@ -466,9 +468,15 @@ def apply_css() -> None:
         .table-scroll {{
             width: 100%;
             overflow-x: auto;
+            overflow-y: visible;
+            max-height: none;
             border: 1px solid rgba(31, 42, 68, .95);
             border-radius: 18px;
             background: linear-gradient(180deg, rgba(17, 24, 45, .98), rgba(11, 16, 32, .78));
+        }}
+        .table-scroll-large {{
+            overflow: auto;
+            max-height: 430px;
         }}
 
         .styled-table {{
@@ -580,13 +588,24 @@ def load_csv(path: str) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(show_spinner=False)
+def load_json(path: str) -> dict:
+    json_path = Path(path)
+    if not json_path.exists():
+        return {}
+    try:
+        return json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def service_distribution(modelo: str) -> str:
     text = str(modelo).lower()
     if "triangular" in text:
         return "Triangular"
     if "empirical" in text or "empiric" in text:
         return "Empírica"
-    if "m/d/c" in text:
+    if "m/d/c" in text or "m/d/1" in text:
         return "Determinística"
     if "m/g/c" in text:
         return "Geral"
@@ -594,7 +613,11 @@ def service_distribution(modelo: str) -> str:
 
 
 def load_all_data() -> dict[str, pd.DataFrame]:
-    data = {name: load_csv(str(path)) for name, path in FILES.items()}
+    data = {
+        name: load_csv(str(path))
+        for name, path in FILES.items()
+        if path.suffix.lower() == ".csv"
+    }
     for name in ["simulacao_resultados", "resumo_cenarios"]:
         df = data[name]
         if not df.empty and "modelo" in df.columns:
@@ -610,6 +633,104 @@ def format_number(value, digits: int = 2, suffix: str = "") -> str:
     if isinstance(value, str):
         return value
     return f"{float(value):,.{digits}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def format_seconds(value, digits: int = 2) -> str:
+    return f"{format_number(value, digits)}s" if value is not None and not pd.isna(value) else "N/D"
+
+
+def format_percent(value, digits: int = 2) -> str:
+    return f"{format_number(value, digits)}%" if value is not None and not pd.isna(value) else "N/A"
+
+
+def metric_row(empirical: pd.DataFrame, metric_name: str) -> pd.Series | None:
+    if empirical.empty or "metrica" not in empirical.columns:
+        return None
+    row = empirical[empirical["metrica"].astype(str) == metric_name]
+    return None if row.empty else row.iloc[0]
+
+
+def metric_value(empirical: pd.DataFrame, metric_name: str, column: str) -> float:
+    row = metric_row(empirical, metric_name)
+    if row is None or column not in row.index:
+        return np.nan
+    return row[column]
+
+
+def display_metric_name(metric_name: str) -> str:
+    names = {
+        "tempo_login": "tempo_login",
+        "tempo_solicitacao": "tempo_solicitação",
+        "tempo_total": "tempo_total",
+    }
+    return names.get(str(metric_name), str(metric_name))
+
+
+def missing_data_card(file_key: str, command: str) -> None:
+    path = FILES[file_key]
+    st.markdown(
+        f"""
+        <div class="soft-warning">
+            Arquivo ausente ou vazio: <strong>{html_lib.escape(str(path.relative_to(BASE_DIR)))}</strong><br>
+            Execute <code>{html_lib.escape(command)}</code> para regenerar os dados.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def model_input_value(model_inputs: dict, key: str, default=np.nan):
+    value = model_inputs.get(key, default) if model_inputs else default
+    return value
+
+
+def analytical_stable_rows(analytical: pd.DataFrame) -> pd.DataFrame:
+    if analytical.empty:
+        return analytical
+    df = analytical.copy()
+    if "c" in df.columns:
+        df = df[df["c"].eq(1)]
+    if "status_analitico" in df.columns:
+        df = df[df["status_analitico"].astype(str).str.upper().eq("ESTAVEL")]
+    elif "rho_analitico" in df.columns:
+        df = df[df["rho_analitico"] < 1]
+    return df.sort_values("lambda_hora") if "lambda_hora" in df.columns else df
+
+
+def md1_limit_table(analytical: pd.DataFrame) -> pd.DataFrame:
+    if analytical.empty:
+        return pd.DataFrame()
+    df = analytical.copy()
+    if "c" in df.columns:
+        df = df[df["c"].eq(1)]
+    rho_col = "rho_analitico" if "rho_analitico" in df.columns else "rho_simulado" if "rho_simulado" in df.columns else "rho"
+    if rho_col not in df.columns or "lambda_hora" not in df.columns:
+        return pd.DataFrame()
+    status_col = "status_analitico" if "status_analitico" in df.columns else "status_estabilidade"
+    table = pd.DataFrame(
+        {
+            "lambda_hora": df["lambda_hora"],
+            "rho_com_c_1": df[rho_col],
+            "status": (
+                df[status_col].astype(str).str.upper()
+                if status_col in df.columns
+                else np.where(df[rho_col] < 1, "ESTAVEL", "INSTAVEL")
+            ),
+        }
+    )
+    return table.sort_values("lambda_hora")
+
+
+def capacity_extension_table(summary: pd.DataFrame) -> pd.DataFrame:
+    if summary.empty:
+        return pd.DataFrame()
+    df = summary.copy()
+    if "modelo" in df.columns:
+        mdc = df[df["modelo"].astype(str).str.upper().eq("M/D/C")]
+        if not mdc.empty:
+            df = mdc
+    table = calcular_menor_c_estavel(df)
+    return table if isinstance(table, pd.DataFrame) else pd.DataFrame()
 
 
 def plotly_theme(fig: go.Figure, height: int = 390) -> go.Figure:
@@ -743,6 +864,18 @@ def _render_styled_table_legacy(
     return
 
 
+def calcular_altura_tabela(num_linhas: int, num_colunas: int, compacta: bool = True) -> int:
+    """Calcula a altura do componente HTML para evitar corte em tabelas pequenas."""
+    header = 160
+    row_height = 48
+    footer = 70
+    column_extra = 28 if num_colunas > 8 else 0
+    altura = header + (num_linhas * row_height) + footer + column_extra
+    if compacta:
+        return max(260, min(altura, 760))
+    return 600
+
+
 def render_styled_table(
     title: str,
     df: pd.DataFrame,
@@ -753,9 +886,24 @@ def render_styled_table(
 ) -> None:
     """Renderiza uma tabela HTML leve, com limite inicial e scroll horizontal."""
     subtitle_html = f'<div class="table-subtitle">{html_lib.escape(subtitle)}</div>' if subtitle else ""
+    column_labels = {
+        "metrica": "métrica",
+        "media": "média",
+        "lambda_hora": "λ/h",
+        "rho": "ρ",
+        "rho_com_c_1": "ρ com c=1",
+        "menor_c_estavel": "menor c estável",
+        "W_calculado": "W calculado",
+        "W_simulado": "W simulado",
+        "erro_W": "erro W",
+    }
+    total_rows = 0
+    displayed_rows = 0
+    displayed_columns = 0
+    small_table = True
 
     if df is None or df.empty:
-        table_body = '<div class="soft-warning">Nenhum dado disponivel para esta tabela.</div>'
+        table_body = '<div class="soft-warning">Nenhum dado disponível para esta tabela.</div>'
     else:
         table_df = df.copy()
         if columns:
@@ -765,9 +913,13 @@ def render_styled_table(
 
         total_rows = len(table_df)
         displayed_df = table_df.head(max_rows).copy()
+        displayed_rows = len(displayed_df)
+        displayed_columns = len(displayed_df.columns)
+        small_table = total_rows <= 10
         for col in displayed_df.select_dtypes(include=["float", "float64", "float32"]).columns:
             digits = 4 if "coeficiente_variacao" in col else 2
             displayed_df[col] = displayed_df[col].round(digits)
+        displayed_df = displayed_df.rename(columns=column_labels)
 
         info = (
             f"Exibindo primeiras {min(total_rows, max_rows):,} de {total_rows:,} linhas "
@@ -779,9 +931,10 @@ def render_styled_table(
             classes="styled-table",
             border=0,
         )
+        table_scroll_class = "table-scroll" if small_table else "table-scroll table-scroll-large"
         table_body = f"""
             <div class="table-meta">{html_lib.escape(info)}</div>
-            <div class="table-scroll">{table_html}</div>
+            <div class="{table_scroll_class}">{table_html}</div>
         """
 
     table_component_html = f"""
@@ -846,9 +999,15 @@ def render_styled_table(
         .table-scroll {{
             width: 100%;
             overflow-x: auto;
+            overflow-y: visible;
+            max-height: none;
             border: 1px solid rgba(31, 42, 68, .95);
             border-radius: 18px;
             background: linear-gradient(180deg, rgba(17, 24, 45, .98), rgba(11, 16, 32, .78));
+        }}
+        .table-scroll-large {{
+            overflow: auto;
+            max-height: 430px;
         }}
         .styled-table {{
             width: 100%;
@@ -901,7 +1060,16 @@ def render_styled_table(
         </div>
     </div>
     """
-    components.html(table_component_html, height=height, scrolling=True)
+    if df is None or df.empty:
+        component_height = max(260, min(height, 360))
+        component_scrolling = False
+    elif small_table:
+        component_height = calcular_altura_tabela(displayed_rows, displayed_columns, compacta=True)
+        component_scrolling = False
+    else:
+        component_height = max(520, min(height if height else 600, 600))
+        component_scrolling = True
+    components.html(table_component_html, height=component_height, scrolling=component_scrolling)
     return
 
 
@@ -952,7 +1120,12 @@ def calcular_menor_c_estavel(summary: pd.DataFrame, lambda_hora: float | None = 
     return pd.DataFrame(rows).sort_values("lambda_hora")
 
 
-def calcular_kpis(summary: pd.DataFrame, empirical: pd.DataFrame, model_selection: pd.DataFrame) -> dict:
+def calcular_kpis(
+    summary: pd.DataFrame,
+    empirical: pd.DataFrame,
+    model_selection: pd.DataFrame,
+    model_inputs: dict | None = None,
+) -> dict:
     total_cenarios = len(summary)
     total_replicas = int(summary["quantidade_replicas"].sum()) if "quantidade_replicas" in summary.columns else 0
     max_degradacao = summary["fator_degradacao_medio"].max() if "fator_degradacao_medio" in summary.columns else np.nan
@@ -963,20 +1136,20 @@ def calcular_kpis(summary: pd.DataFrame, empirical: pd.DataFrame, model_selectio
         else np.nan
     )
 
-    modelo_calibrado = "N/D"
-    if not model_selection.empty and {"metrica", "modelo_sugerido"}.issubset(model_selection.columns):
+    modelo_calibrado = str(model_inputs.get("model_recommendation", "N/D")) if model_inputs else "N/D"
+    if modelo_calibrado == "N/D" and not model_selection.empty and {"metrica", "modelo_sugerido"}.issubset(model_selection.columns):
         row = model_selection[model_selection["metrica"] == "tempo_solicitacao"]
         if not row.empty:
             modelo_calibrado = str(row.iloc[0]["modelo_sugerido"])
 
-    servico_calibrado = "N/D"
-    cv_servico = "N/D"
+    servico_calibrado = format_seconds(model_inputs.get("service_time_seconds")) if model_inputs else "N/D"
+    cv_servico = format_number(model_inputs.get("cv_service"), 4) if model_inputs else "N/D"
     if not empirical.empty and {"metrica", "media"}.issubset(empirical.columns):
         row = empirical[empirical["metrica"] == "tempo_solicitacao"]
-        if not row.empty:
+        if servico_calibrado == "N/D" and not row.empty:
             servico_calibrado = f"{format_number(row.iloc[0]['media'], 2)} s"
-            if "coeficiente_variacao" in row.columns:
-                cv_servico = format_number(row.iloc[0]["coeficiente_variacao"], 4)
+        if cv_servico == "N/D" and not row.empty and "coeficiente_variacao" in row.columns:
+            cv_servico = format_number(row.iloc[0]["coeficiente_variacao"], 4)
 
     return {
         "total_cenarios": total_cenarios,
@@ -1239,10 +1412,10 @@ def render_header() -> None:
             <h1 class="premium-title">Dashboard de Simulação — Portal do Aluno UNDB</h1>
             <div class="premium-subtitle">Análise do fluxo de Requerimento de Horas Complementares</div>
             <div class="badge-row">
+                <span class="neon-badge">Selenium</span>
                 <span class="neon-badge">SimPy</span>
-                <span class="neon-badge">Notação de Kendall</span>
+                <span class="neon-badge">M/D/1</span>
                 <span class="neon-badge">M/D/c</span>
-                <span class="neon-badge">M/G/c</span>
             </div>
         </div>
         """,
@@ -1250,8 +1423,296 @@ def render_header() -> None:
     )
 
 
-def render_overview(summary, empirical, model_selection) -> None:
-    kpis = calcular_kpis(summary, empirical, model_selection)
+def render_measurement_simulation(empirical: pd.DataFrame, model_inputs: dict) -> None:
+    """Compatibilidade: usa a aba dinâmica de medição."""
+    render_selenium_measurement(empirical, model_inputs)
+
+
+def build_selenium_usage_table(empirical: pd.DataFrame) -> pd.DataFrame:
+    usage = {
+        "tempo_login": "não usado como serviço principal",
+        "tempo_solicitacao": "tempo de serviço da simulação",
+        "tempo_total": "fluxo completo complementar",
+    }
+    rows = []
+    for metric, use in usage.items():
+        row = metric_row(empirical, metric)
+        if row is None:
+            rows.append({"metrica": display_metric_name(metric), "media": "N/D", "P95": "N/D", "CV": "N/D", "uso": use})
+            continue
+        rows.append(
+            {
+                "metrica": display_metric_name(metric),
+                "media": format_seconds(row.get("media")),
+                "P95": format_seconds(row.get("p95")),
+                "CV": format_number(row.get("coeficiente_variacao"), 4),
+                "uso": use,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_selenium_measurement(empirical: pd.DataFrame, model_inputs: dict) -> None:
+    """Aba 1: tempos reais do Selenium vindos do CSV processado."""
+    if empirical.empty:
+        missing_data_card("resumo_tempos", "python -m src.analysis.selenium_metrics_loader")
+        return
+
+    service_metric = str(model_input_value(model_inputs, "selected_service_column", "tempo_solicitacao"))
+    service_cv = model_input_value(model_inputs, "cv_service", metric_value(empirical, service_metric, "coeficiente_variacao"))
+
+    st.markdown(
+        """
+        <div class="note-card">
+            <strong>Medição Selenium</strong><br>
+            O Selenium mediu o tempo real do fluxo. O tempo_solicitação foi escolhido como tempo de serviço porque apresentou baixa variabilidade.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(4)
+    with cols[0]:
+        render_kpi_card("tempo_login", format_seconds(metric_value(empirical, "tempo_login", "media")), "autenticação e sessão", COLORS["orange"])
+    with cols[1]:
+        render_kpi_card("tempo_solicitação", format_seconds(metric_value(empirical, "tempo_solicitacao", "media")), "serviço principal", COLORS["cyan"])
+    with cols[2]:
+        render_kpi_card("tempo_total", format_seconds(metric_value(empirical, "tempo_total", "media")), "fluxo completo", COLORS["purple"])
+    with cols[3]:
+        render_kpi_card("CV solicitação", format_number(service_cv, 4), "baixa variabilidade", COLORS["green"])
+
+    st.markdown(
+        """
+        <div class="note-card">
+            Esses valores foram obtidos pela automação Selenium no fluxo real do portal. O tempo_solicitação foi usado como tempo de serviço da simulação.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    render_styled_table(
+        "Dados reais coletados",
+        build_selenium_usage_table(empirical),
+        "Tabela gerada a partir de data/processed/resumo_tempos_observados.csv.",
+        height=245,
+    )
+
+
+def render_md1_model(model_inputs: dict) -> None:
+    """Aba 2: parâmetros reais do modelo M/D/1."""
+    if not model_inputs:
+        missing_data_card("model_inputs", "python -m src.analysis.selenium_metrics_loader")
+        return
+
+    service_time = model_input_value(model_inputs, "service_time_seconds")
+    mu_per_hour = model_input_value(model_inputs, "mu_per_hour")
+    service_column = str(model_input_value(model_inputs, "selected_service_column", "tempo_solicitacao"))
+    service_column_display = display_metric_name(service_column)
+    recommendation = str(model_input_value(model_inputs, "model_recommendation", "N/D"))
+    cv_service = model_input_value(model_inputs, "cv_service")
+
+    st.markdown(
+        """
+        <div class="note-card">
+            <strong>Modelo principal de validação: M/D/1/&infin;/&infin;/FIFO</strong><br>
+            O M/D/1 valida o comportamento inicial do sistema com um único canal, usando o tempo real medido pelo Selenium como serviço.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(4)
+    with cols[0]:
+        render_insight_card("M", "chegadas aleatórias", COLORS["cyan"])
+    with cols[1]:
+        render_insight_card("D", "serviço determinístico", COLORS["green"])
+    with cols[2]:
+        render_insight_card("1", "um servidor/canal", COLORS["pink"])
+    with cols[3]:
+        render_insight_card("FIFO", "ordem de chegada", COLORS["purple"])
+
+    cols = st.columns(4)
+    with cols[0]:
+        render_kpi_card("Tempo médio de serviço", format_seconds(service_time), service_column_display, COLORS["cyan"])
+    with cols[1]:
+        render_kpi_card("mu", f"{format_number(mu_per_hour, 2)}/h", "atendimentos por hora", COLORS["green"])
+    with cols[2]:
+        render_kpi_card("CV do serviço", format_number(cv_service, 4), "decisão M/D/1", COLORS["pink"])
+    with cols[3]:
+        render_kpi_card("rho", "lambda / mu", "uso com c=1", COLORS["orange"])
+
+    st.markdown(
+        f"""
+        <div class="note-card">
+            Diferente do M/M/1, o serviço foi tratado como determinístico porque o {html_lib.escape(service_column_display)} apresentou CV = {format_number(cv_service, 4)}.<br>
+            Recomendação gerada: <strong>{html_lib.escape(recommendation)}</strong>.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def analytical_display_table(analytical: pd.DataFrame, stable_only: bool = True) -> pd.DataFrame:
+    df = analytical_stable_rows(analytical) if stable_only else analytical.copy()
+    if df.empty:
+        return pd.DataFrame()
+    rows = []
+    for _, row in df.iterrows():
+        status = str(row.get("status_analitico", "ESTAVEL")).upper()
+        unavailable = status != "ESTAVEL"
+        rows.append(
+            {
+                "λ/h": row.get("lambda_hora"),
+                "ρ": format_number(row.get("rho_analitico"), 2),
+                "W calculado": "N/A - ρ ≥ 1" if unavailable else format_seconds(row.get("W_analitico_seg")),
+                "W simulado": format_seconds(row.get("W_simulado_seg")),
+                "erro W": "N/A - ρ ≥ 1" if unavailable else format_percent(row.get("erro_percentual_W")),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_calculated_vs_simulated_simple(analytical: pd.DataFrame) -> None:
+    """Aba 3: comparação direta gerada pelo CSV analítico."""
+    if analytical.empty:
+        missing_data_card("comparacao_analitica", "python -m src.simulation.experiments")
+        return
+    table = analytical_display_table(analytical, stable_only=True)
+    if table.empty:
+        empty_chart("Não há cenários M/D/1 estáveis para comparar. Rode a simulação novamente ou verifique comparacao_analitica_md1.csv.")
+        return
+    render_styled_table(
+        "Calculado x Simulado",
+        table,
+        "Cenários estáveis com c=1, gerados a partir de results/simulation/comparacao_analitica_md1.csv.",
+        height=260,
+    )
+    st.markdown(
+        """
+        <div class="note-card">
+            Os erros baixos mostram que o SimPy reproduziu bem o comportamento analítico do M/D/1 nos cenários estáveis.<br>
+            Para ρ ≥ 1, o modelo analítico não possui solução estacionária, por isso o cálculo aparece como N/A.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_md1_limit(analytical: pd.DataFrame) -> None:
+    """Aba 4: limite do M/D/1 derivado de rho no CSV analítico."""
+    if analytical.empty:
+        missing_data_card("comparacao_analitica", "python -m src.simulation.experiments")
+        return
+    table = md1_limit_table(analytical)
+    if table.empty:
+        empty_chart("Não há colunas suficientes para calcular o limite do M/D/1.")
+        return
+    display = table.copy()
+    display["rho_com_c_1"] = display["rho_com_c_1"].apply(lambda value: format_number(value, 2))
+    display["status"] = display["status"].astype(str).str.upper().replace({"ESTAVEL": "estável", "INSTAVEL": "instável"})
+    render_styled_table(
+        "Limite do M/D/1",
+        display,
+        "Com um único canal, o sistema deixa de ser estável quando ρ ≥ 1.",
+        height=330,
+    )
+
+
+def render_mdc_extension(summary: pd.DataFrame) -> None:
+    """Aba 5: M/D/c como extensão calculada a partir do resumo da simulação."""
+    if summary.empty:
+        missing_data_card("resumo_cenarios", "python -m src.simulation.experiments")
+        return
+    table = capacity_extension_table(summary)
+    if table.empty:
+        empty_chart("Não há cenários estáveis suficientes para calcular o menor c por λ.")
+        return
+    render_styled_table(
+        "Extensão M/D/c",
+        table,
+        "Tabela calculada a partir de results/simulation/resumo_cenarios.csv, sem capacidades fixas no dashboard.",
+        height=330,
+    )
+    fig = px.bar(
+        table,
+        x="lambda_hora",
+        y="menor_c_estavel",
+        color="menor_c_estavel",
+        color_continuous_scale=[[0, COLORS["cyan"]], [1, COLORS["pink"]]],
+        labels={"lambda_hora": "λ/h", "menor_c_estavel": "menor c estável"},
+    )
+    fig.update_traces(texttemplate="%{y:.0f}", textposition="outside", cliponaxis=False)
+    fig.update_layout(showlegend=False, coloraxis_showscale=False)
+    render_chart_card("Menor c estável por demanda", plotly_theme(fig, 320), chart_key="mdc_extension_min_c")
+    st.markdown(
+        """
+        <div class="note-card">
+            <strong>Conclusão:</strong> A capacidade do portal precisa ser dimensionada pelo pico, não apenas pelo comportamento médio fora do pico.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_mdc_model(empirical, model_selection) -> None:
+    """Aba focada no modelo M/D/c e nos parâmetros calibrados."""
+    service_mean = np.nan
+    service_cv = np.nan
+    if not empirical.empty and {"metrica", "media"}.issubset(empirical.columns):
+        service = empirical[empirical["metrica"] == "tempo_solicitacao"]
+        if not service.empty:
+            service_mean = service.iloc[0]["media"]
+            if "coeficiente_variacao" in service.columns:
+                service_cv = service.iloc[0]["coeficiente_variacao"]
+
+    mu = 3600 / service_mean if pd.notna(service_mean) and service_mean > 0 else np.nan
+
+    cols = st.columns(3)
+    with cols[0]:
+        render_kpi_card("Modelo principal", "M/D/c", "serviço determinístico calibrado", COLORS["pink"])
+    with cols[1]:
+        render_kpi_card("Tempo de serviço", f"{format_number(service_mean, 2)} s", "média de tempo_solicitação", COLORS["cyan"])
+    with cols[2]:
+        render_kpi_card("μ estimado", f"{format_number(mu, 2)}/h", "atendimentos por hora", COLORS["green"])
+
+    st.markdown(
+        """
+        <div class="note-card">
+            <strong>Notação de Kendall:</strong> M/D/c/∞/∞/FIFO<br>
+            M representa chegadas aleatórias, D representa serviço determinístico, c é a capacidade
+            paralela efetiva e FIFO mantém a ordem de chegada. A condição central de estabilidade é
+            ρ = λ / (c × μ). Quando ρ ≥ 1, a fila tende a crescer.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    cols = st.columns(2)
+    with cols[0]:
+        render_insight_card(
+            "Por que não M/M/1?",
+            "O projeto dimensiona múltiplas capacidades paralelas, portanto o modelo principal precisa variar c e não ficar limitado a um servidor.",
+            COLORS["orange"],
+        )
+    with cols[1]:
+        render_insight_card(
+            "Papel do M/G/c",
+            f"Com CV de serviço {format_number(service_cv, 4)}, o M/G/c fica como análise complementar, não como protagonista.",
+            COLORS["purple"],
+        )
+
+    with st.expander("Classificação estatística usada na calibração", expanded=False):
+        render_styled_table(
+            "Modelo sugerido pela calibração",
+            model_selection,
+            "A escolha entre M/D/c e M/G/c é baseada no coeficiente de variação.",
+            height=320,
+        )
+
+
+def render_queues_and_degradation(summary) -> None:
+    render_queues(summary)
+    render_degradation(summary)
+
+
+def render_overview(summary, empirical, model_selection, model_inputs=None) -> None:
+    kpis = calcular_kpis(summary, empirical, model_selection, model_inputs)
     c1_offpeak = (
         summary[(summary["periodo"] == "fora_pico") & (summary["c"] == 1)]
         if {"periodo", "c"}.issubset(summary.columns)
@@ -1273,7 +1734,7 @@ def render_overview(summary, empirical, model_selection) -> None:
     with cols[0]:
         render_kpi_card("Modelo calibrado", kpis["modelo_calibrado"], "decisão baseada no CV", COLORS["pink"])
     with cols[1]:
-        render_kpi_card("Serviço calibrado", kpis["servico_calibrado"], "média de tempo_solicitacao", COLORS["cyan"])
+        render_kpi_card("Serviço calibrado", kpis["servico_calibrado"], "média de tempo_solicitação", COLORS["cyan"])
     with cols[2]:
         render_kpi_card("Maior P95 observado", f"{format_number(kpis['max_p95'], 2)} s", "cauda do tempo no sistema", COLORS["orange"])
     with cols[3]:
@@ -1327,7 +1788,7 @@ def render_calibration(empirical, model_selection) -> None:
 
     cols = st.columns(3)
     with cols[0]:
-        render_insight_card("Serviço principal", f"tempo_solicitacao foi escolhido porque o CV é {service_cv}, muito baixo.", COLORS["cyan"])
+        render_insight_card("Serviço principal", f"tempo_solicitação foi escolhido porque o CV é {service_cv}, muito baixo.", COLORS["cyan"])
     with cols[1]:
         render_insight_card("Login fora do serviço", f"tempo_login não foi usado como serviço principal porque o CV é {login_cv}.", COLORS["orange"])
     with cols[2]:
@@ -1343,7 +1804,7 @@ def render_calibration(empirical, model_selection) -> None:
         render_styled_table(
             "Resumo de tempos observados",
             empirical,
-            "Metricas estatisticas usadas para calibrar o servico da simulacao.",
+            "Métricas estatísticas usadas para calibrar o serviço da simulação.",
             columns=[
                 "metrica",
                 "quantidade_amostras",
@@ -1359,9 +1820,9 @@ def render_calibration(empirical, model_selection) -> None:
         )
     with st.expander("Modelo sugerido pela calibração", expanded=False):
         render_styled_table(
-            "Selecao inicial de modelo",
+            "Seleção inicial de modelo",
             model_selection,
-            "Classificacao baseada no coeficiente de variacao observado.",
+            "Classificação baseada no coeficiente de variação observado.",
         )
 
 
@@ -1376,9 +1837,9 @@ def render_stability(summary) -> None:
     cols = st.columns([1, 1.4])
     with cols[0]:
         render_styled_table(
-            "Menor c estavel por lambda",
+            "Menor c estável por λ",
             table,
-            "Capacidade minima encontrada para manter rho abaixo de 1.",
+            "Capacidade mínima encontrada para manter ρ abaixo de 1.",
             columns=["lambda_hora", "menor_c_estavel"],
             height=300,
         )
@@ -1428,32 +1889,32 @@ def render_analytical(analytical) -> None:
     cols = [c for c in ["periodo", "lambda_hora", "c", "status_analitico", "erro_percentual_Wq", "erro_percentual_W"] if c in analytical.columns]
     with st.expander("Tabela de erro percentual", expanded=False):
         render_styled_table(
-            "Erro percentual analitico vs simulado",
+            "Erro percentual analítico vs simulado",
             analytical[cols] if cols else analytical,
-            "Comparacao em segundos para Wq e W no caso M/D/1 estavel.",
+            "Comparação em segundos para Wq e W no caso M/D/1 estável.",
         )
 
 
 def render_data_tables(summary, replicas, analytical) -> None:
     with st.expander("Resumo por cenário", expanded=False):
         render_styled_table(
-            "Resumo por cenario",
+            "Resumo por cenário",
             summary,
-            "Resultados consolidados por combinacao de modelo, periodo, lambda e capacidade c.",
+            "Resultados consolidados por combinação de modelo, período, λ e capacidade c.",
             height=460,
         )
     with st.expander("Resultados por réplica", expanded=False):
         render_styled_table(
-            "Resultados por replica",
+            "Resultados por réplica",
             replicas,
-            "Execucoes independentes da simulacao usadas para estimar as metricas.",
+            "Execuções independentes da simulação usadas para estimar as métricas.",
             height=460,
         )
     with st.expander("Comparação analítica", expanded=False):
         render_styled_table(
-            "Comparacao analitica M/D/1",
+            "Comparação analítica M/D/1",
             analytical,
-            "Validacao do simulador para cenarios com c=1 e regime estavel.",
+            "Validação do simulador para cenários com c=1 e regime estável.",
             height=420,
         )
 
@@ -1477,6 +1938,7 @@ def main() -> None:
     analytical_raw = data["comparacao_analitica"]
     empirical = data["resumo_tempos"]
     model_selection = data["modelo_sugerido"]
+    model_inputs = load_json(str(FILES["model_inputs"]))
 
     summary = summary_raw.copy()
     replicas = replicas_raw.copy()
@@ -1489,32 +1951,33 @@ def main() -> None:
             st.warning(f"Arquivo não encontrado: {path.relative_to(BASE_DIR)}")
 
     tabs = st.tabs([
-        "Visão Geral",
-        "Calibração",
-        "Estabilidade",
-        "Filas",
-        "Degradação",
-        "Comparação Analítica",
+        "Medição Selenium",
+        "Modelo M/D/1",
+        "Calculado x Simulado",
+        "Limite do M/D/1",
+        "Extensão M/D/c",
+        "Apoio Técnico",
         "Dados",
-        "Diagnóstico",
     ])
 
     with tabs[0]:
-        render_overview(summary, empirical, model_selection)
+        render_selenium_measurement(empirical, model_inputs)
     with tabs[1]:
-        render_calibration(empirical, model_selection)
+        render_md1_model(model_inputs)
     with tabs[2]:
-        render_stability(summary)
+        render_calculated_vs_simulated_simple(analytical)
     with tabs[3]:
-        render_queues(summary)
+        render_md1_limit(analytical)
     with tabs[4]:
-        render_degradation(summary)
+        render_mdc_extension(summary)
     with tabs[5]:
+        render_overview(summary, empirical, model_selection, model_inputs)
+        render_calibration(empirical, model_selection)
         render_analytical(analytical)
+        render_stability(summary)
+        render_queues_and_degradation(summary)
     with tabs[6]:
         render_data_tables(summary, replicas, analytical)
-    with tabs[7]:
-        render_diagnostics(data)
 
 
 if __name__ == "__main__":

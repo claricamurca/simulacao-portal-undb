@@ -1,4 +1,5 @@
 import random
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -20,10 +21,12 @@ def load_service_stats(
     metric: str = config.SERVICE_TIME_METRIC,
     path: Path = config.RESUMO_TEMPOS_FILE,
 ) -> dict:
+    model_inputs = load_model_inputs()
+
     if not path.exists():
         raise FileNotFoundError(
             "Resumo empirico nao encontrado. Execute antes: "
-            "python -m src.analysis.empirical_metrics"
+            "python -m src.analysis.selenium_metrics_loader"
         )
 
     df = pd.read_csv(path)
@@ -34,18 +37,38 @@ def load_service_stats(
         raise ValueError(f"Metrica de servico nao encontrada no resumo: {metric}")
 
     record = row.iloc[0].to_dict()
+    service_mean = (
+        float(model_inputs["service_time_seconds"])
+        if model_inputs
+        else float(record["media"])
+    )
+    service_cv = (
+        float(model_inputs["cv_service"])
+        if model_inputs
+        else float(record["coeficiente_variacao"])
+    )
+
     return {
         "metrica": metric,
         "quantidade_amostras": int(record["quantidade_amostras"]),
-        "media": float(record["media"]),
+        "media": service_mean,
         "mediana": float(record["mediana"]),
         "minimo": float(record["minimo"]),
         "maximo": float(record["maximo"]),
         "desvio_padrao": float(record["desvio_padrao"]),
         "p90": float(record["p90"]),
         "p95": float(record["p95"]),
-        "coeficiente_variacao": float(record["coeficiente_variacao"]),
+        "coeficiente_variacao": service_cv,
     }
+
+
+def load_model_inputs(path: Path = config.MODEL_INPUTS_FILE) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(
+            "Parametros do modelo nao encontrados. Execute antes: "
+            "python -m src.analysis.selenium_metrics_loader"
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_empirical_service_samples(

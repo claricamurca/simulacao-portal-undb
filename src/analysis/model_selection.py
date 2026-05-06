@@ -18,8 +18,16 @@ def classify_variability(cv: float) -> str:
 
 def suggest_model(cv: float) -> str:
     if cv < 0.10:
-        return "M/D/c"
-    return "M/G/c"
+        return "M/D/1 para validacao e M/D/c para capacidade"
+    return "M/G/1 ou M/G/c como analise complementar"
+
+
+def kendall_notation(model: str) -> str:
+    if model.startswith("M/D/1"):
+        return "M/D/1/∞/∞/FIFO + M/D/c/∞/∞/FIFO"
+    if model.startswith("M/G/1"):
+        return "M/G/1/∞/∞/FIFO ou M/G/c/∞/∞/FIFO"
+    return f"{model}/∞/∞/FIFO"
 
 
 def select_models(
@@ -49,7 +57,7 @@ def select_models(
         classify_variability
     )
     df["modelo_sugerido"] = df["coeficiente_variacao"].apply(suggest_model)
-    df["notacao_kendall_base"] = df["modelo_sugerido"] + "/∞/∞/FIFO"
+    df["notacao_kendall_base"] = df["modelo_sugerido"].apply(kendall_notation)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_file, index=False, encoding="utf-8")

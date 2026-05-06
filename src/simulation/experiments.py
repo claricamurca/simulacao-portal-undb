@@ -11,6 +11,7 @@ from src.simulation.distributions import (
     load_service_stats,
 )
 from src.simulation.metrics import percent_error, predominant_status, safe_stdev
+from src.simulation.models.md1_fifo import simulate_md1_fifo
 from src.simulation.models.mdc_fifo import simulate_mdc_fifo
 from src.simulation.models.mgc_fifo import simulate_mgc_fifo
 
@@ -34,11 +35,20 @@ def run_all_replicas() -> pd.DataFrame:
     for model_index, variant in enumerate(config.MODEL_VARIANTS):
         for periodo, lambdas_hora in config.ARRIVAL_SCENARIOS.items():
             for lambda_hora in lambdas_hora:
-                for c in config.SERVER_CAPACITIES:
+                capacities = [1] if variant == "md1" else config.SERVER_CAPACITIES
+                for c in capacities:
                     for replica in range(1, config.REPLICAS + 1):
                         seed = scenario_seed(model_index, lambda_hora, c, replica)
 
-                        if variant == "mdc":
+                        if variant == "md1":
+                            result = simulate_md1_fifo(
+                                periodo=periodo,
+                                lambda_hora=lambda_hora,
+                                replica=replica,
+                                seed=seed,
+                                service_stats=service_stats,
+                            )
+                        elif variant == "mdc":
                             result = simulate_mdc_fifo(
                                 periodo=periodo,
                                 lambda_hora=lambda_hora,
@@ -147,7 +157,9 @@ def consolidate_scenarios(df: pd.DataFrame) -> pd.DataFrame:
 def build_analytical_comparison(summary_df: pd.DataFrame) -> pd.DataFrame:
     rows = []
 
-    md1_rows = summary_df[(summary_df["modelo"] == "M/D/c") & (summary_df["c"] == 1)]
+    md1_rows = summary_df[summary_df["modelo"] == "M/D/1"]
+    if md1_rows.empty:
+        md1_rows = summary_df[(summary_df["modelo"] == "M/D/c") & (summary_df["c"] == 1)]
 
     for _, row in md1_rows.iterrows():
         analytical = md1_analytical(

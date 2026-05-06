@@ -2,42 +2,35 @@
 
 Projeto de simulação e avaliação do fluxo de Requerimento de Horas Complementares do Portal do Aluno UNDB.
 
-## Equipe
-- Anna Carolyna Almeida
-- Artho Eduardo
-- Clarissa Camurça
-- Gabriel Muller
-- Marcelo Augusto
-- Marcos Santos
-- Thiago Vasconcelos
+## Objetivo
 
-A versão final separa três etapas:
+O projeto usa uma pipeline reprodutível:
 
-- Análise empírica de tempos coletados anteriormente via Selenium.
-- Simulação de eventos discretos com SimPy e modelos de filas.
-- Dashboard Streamlit para apresentação dos resultados.
+```text
+Selenium real -> CSV bruto -> análise empírica -> parâmetros do modelo -> SimPy -> CSVs de simulação -> dashboard Streamlit
+```
 
-Selenium não é mais o motor do projeto. Os scripts antigos foram arquivados em `_archive_selenium/`; os dados brutos usados pela calibração permanecem em `data/raw/selenium/`.
+O Selenium não é o motor da simulação. Ele é usado como instrumento de coleta empírica dos tempos reais do fluxo. A simulação principal é executada com SimPy.
 
 ## Modelo de Filas
 
-O modelo principal da simulação é:
+A apresentação principal usa o modelo:
+
+```text
+M/D/1/infinito/infinito/FIFO
+```
+
+Ele valida o comportamento inicial do sistema com um único canal. O tempo de serviço vem de `tempo_solicitacao`, calculado a partir dos CSVs reais do Selenium.
+
+Como extensão de capacidade, o projeto usa:
 
 ```text
 M/D/c/infinito/infinito/FIFO
 ```
 
-Ele usa `tempo_solicitacao` como tempo de serviço da entidade solicitação. A decisão vem do coeficiente de variação observado: quando `CV < 0.10`, o serviço é tratado como quase deterministico.
+Essa extensão varia `c` para identificar a menor capacidade estável em cada cenário de chegada.
 
-O modelo complementar para sensibilidade é:
-
-```text
-M/G/c/infinito/infinito/FIFO
-```
-
-Esse modelo representa serviço genérico com variabilidade, usando distribuição empírica ou triangular.
-
-## Estrutura Atual
+## Estrutura Principal
 
 ```text
 assets/
@@ -45,9 +38,12 @@ data/
   raw/
     selenium/
       metrics_fluxo.csv
+      metrics_carga.csv
+      metrics_erros.csv
   processed/
     resumo_tempos_observados.csv
     modelo_sugerido.csv
+    model_inputs.json
 results/
   simulation/
     simulacao_resultados.csv
@@ -55,15 +51,15 @@ results/
     comparacao_analitica_md1.csv
 src/
   analysis/
+    selenium_metrics_loader.py
+    empirical_metrics.py
+    model_selection.py
   simulation/
   reporting/
     dashboard_streamlit.py
-tests/
-  unit/
-  integration/
 ```
 
-Arquivos Selenium, testes antigos, dashboard Dash e métricas antigas em `results/metrics_*.csv` foram movidos para `_archive_selenium/`.
+Arquivos antigos de Selenium foram preservados em `_archive_selenium/` quando não fazem parte da versão final.
 
 ## Instalar Dependências
 
@@ -71,33 +67,34 @@ Arquivos Selenium, testes antigos, dashboard Dash e métricas antigas em `result
 pip install -r requirements.txt
 ```
 
-## Rodar Análise Empirica
+## Pipeline Recomendada
+
+1. Processar dados reais do Selenium:
 
 ```bash
-python -m src.analysis.empirical_metrics
-python -m src.analysis.model_selection
+python -m src.analysis.selenium_metrics_loader
 ```
 
-A análise empirica lê:
-
-```text
-data/raw/selenium/metrics_fluxo.csv
-```
-
-E gera:
+Esse comando procura os CSVs primeiro em `data/raw/selenium/` e, se necessário, usa fallback em `results/`. Ele gera:
 
 ```text
 data/processed/resumo_tempos_observados.csv
-data/processed/modelo_sugerido.csv
+data/processed/model_inputs.json
 ```
 
-## Rodar Simulação
+2. Rodar seleção inicial de modelo, se desejar atualizar o CSV de classificação:
+
+```bash
+python -m src.analysis.model_selection
+```
+
+3. Rodar simulação SimPy:
 
 ```bash
 python -m src.simulation.experiments
 ```
 
-Saidas geradas:
+Esse comando usa `data/processed/model_inputs.json` para calibrar o tempo de serviço e gera:
 
 ```text
 results/simulation/simulacao_resultados.csv
@@ -105,14 +102,12 @@ results/simulation/resumo_cenarios.csv
 results/simulation/comparacao_analitica_md1.csv
 ```
 
-## Rodar Dashboard
+4. Abrir dashboard Streamlit:
 
 ```bash
 streamlit run src/reporting/dashboard_streamlit.py
 ```
 
-O dashboard apresenta calibração empirica, estabilidade, capacidade, desempenho de filas, degradação e comparação analítica M/D/1.
-
 ## Observação Sobre Dados
 
-Arquivos brutos de coleta, usuarios, PDFs e o arquivo `_archive_selenium/` devem permanecer fora do versionamento quando contiverem dados reais ou sensiveis.
+Arquivos brutos de coleta, usuários, PDFs e dados sensíveis devem permanecer fora do versionamento quando contiverem informações reais.

@@ -1,0 +1,14 @@
+{
+  "service_time_seconds": 12.4717,
+  "service_time_minutes": 0.207862,
+  "mu_per_hour": 288.653512,
+  "cv_service": 0.0086,
+  "selected_service_column": "tempo_solicitacao",
+  "source_service_column": "tempo_solicitacao",
+  "selenium_sample_size": 12,
+  "source_file": "data\\raw\\selenium\\metrics_fluxo.csv",
+  "model_recommendation": "M/D/1 para validacao e M/D/c para extensao de capacidade",
+  "source_files": [
+    "data\\raw\\selenium\\metrics_fluxo.csv"
+  ]
+}

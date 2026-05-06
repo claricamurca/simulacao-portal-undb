@@ -11,6 +11,7 @@ RESULTS_DIR = BASE_DIR / "results"
 SIMULATION_RESULTS_DIR = RESULTS_DIR / "simulation"
 
 RESUMO_TEMPOS_FILE = PROCESSED_DIR / "resumo_tempos_observados.csv"
+MODEL_INPUTS_FILE = PROCESSED_DIR / "model_inputs.json"
 RAW_FLUXO_FILE = RAW_SELENIUM_DIR / "metrics_fluxo.csv"
 
 SIMULATION_REPLICAS_FILE = SIMULATION_RESULTS_DIR / "simulacao_resultados.csv"
@@ -41,8 +42,6 @@ ARRIVAL_SCENARIOS = {
 SERVER_CAPACITIES = [1, 2, 3, 4, 5, 8, 10, 15]
 
 # Modelos executados por padrao:
-# - mdc: M/D/c principal, servico deterministico igual a media observada.
-# - mgc_triangular: M/G/c complementar, servico triangular.
-#
-# Para sensibilidade empirica, adicione "mgc_empirical" a esta tupla.
-MODEL_VARIANTS = ("mdc", "mgc_triangular")
+# - md1: M/D/1 para validacao contra o resultado analitico.
+# - mdc: M/D/c como extensao para dimensionamento de capacidade.
+MODEL_VARIANTS = ("md1", "mdc")
